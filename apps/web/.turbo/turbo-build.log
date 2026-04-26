@@ -1,0 +1,34 @@
+
+> @sadoo/web@1.0.0 build C:\Users\doniy\Desktop\operator-copilot\apps\web
+> next build
+
+  ▲ Next.js 14.2.5
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/7) ...
+   Generating static pages (1/7) 
+   Generating static pages (3/7) 
+   Generating static pages (5/7) 
+ ✓ Generating static pages (7/7)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                              Size     First Load JS
+┌ ○ /                                    2.01 kB        98.4 kB
+├ ○ /_not-found                          873 B          87.9 kB
+├ ○ /admin                               8.08 kB         111 kB
+├ ○ /customer                            3.72 kB         114 kB
+└ ○ /operator                            7.11 kB         123 kB
++ First Load JS shared by all            87.1 kB
+  ├ chunks/1dd3208c-57f726acef193057.js  53.6 kB
+  ├ chunks/286-5a7eef2e43ab1549.js       31.5 kB
+  └ other shared chunks (total)          1.89 kB
+
+
+ƒ Middleware                             26.9 kB
+
+○  (Static)  prerendered as static content
+

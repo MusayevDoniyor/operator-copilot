@@ -6,11 +6,11 @@
 
 @layer base {
   :root {
-    --background: 0 0% 3%;
-    --foreground: 0 0% 100%;
-    --muted: 0 0% 63%;
-    --accent: 0 0% 90%;
-    --border: 0 0% 13%;
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --muted: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --border: 214.3 31.8% 91.4%;
   }
 
   * {
@@ -19,8 +19,8 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    background-color: #080808;
-    color: #ffffff;
+    background-color: #ffffff;
+    color: #0f172a;
   }
 
   ::selection {
@@ -59,7 +59,7 @@
 
   .scrollbar-thin {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+    scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
   }
 
   .scrollbar-thin::-webkit-scrollbar {
@@ -71,13 +71,14 @@
   }
 
   .scrollbar-thin::-webkit-scrollbar-thumb {
-    background-color: rgba(255, 255, 255, 0.2);
+    background-color: rgba(0, 0, 0, 0.1);
     border-radius: 3px;
   }
 
   .glass {
-    @apply bg-opacity-10 backdrop-blur-md;
-    background-color: rgba(255, 255, 255, 0.05);
+    @apply bg-opacity-50 backdrop-blur-md;
+    background-color: rgba(255, 255, 255, 0.7);
+    border: 1px solid rgba(0, 0, 0, 0.05);
   }
 }
 

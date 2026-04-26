@@ -1,10 +1,10 @@
-'use client';
+"use client";
 
-import { useEffect, useRef } from 'react';
-import { io, Socket } from 'socket.io-client';
-import { useAuthStore } from './auth-store';
-import { useQueueStore } from './queue-store';
-import { useCallStore } from './call-store';
+import { useCallback, useEffect, useRef, useState } from "react";
+import { io, Socket } from "socket.io-client";
+import { useAuthStore } from "./auth-store";
+import { useQueueStore } from "./queue-store";
+import { useCallStore } from "./call-store";
 import {
   SocketEvents,
   TranscriptSegment,
@@ -13,145 +13,114 @@ import {
   OperatorStatus,
   AdminDashboardData,
   CustomerProfile,
-} from '@sadoo/types';
+} from "@sadoo/types";
 
-export const useSocket = (role: 'operator' | 'customer' | 'admin') => {
-  const socketRef = useRef<Socket | null>(null);
+export const useSocket = (role: "operator" | "customer" | "admin") => {
+  const [socket, setSocket] = useState<Socket | null>(null);
   const { token, user } = useAuthStore();
   const setQueue = useQueueStore((s) => s.setQueue);
   const setCurrentCall = useCallStore((s) => s.setCurrentCall);
-  const addTranscript = useCallStore((s) => s.addTranscript);
   const updateTranscript = useCallStore((s) => s.updateTranscript);
   const setAIAnalysis = useCallStore((s) => s.setAIAnalysis);
 
   useEffect(() => {
     if (!token || !user) return;
 
-    // Connect to socket server with auth token
-    const socket = io('http://localhost:3001', {
+    const s = io("http://localhost:3001", {
       auth: { token },
-      transports: ['websocket', 'polling'],
+      transports: ["websocket"],
+      reconnection: true,
+      reconnectionAttempts: 10,
     });
-    socketRef.current = socket;
 
-    socket.on('connect', () => {
-      console.log('Socket connected:', socket.id);
-      if (role === 'operator') {
-        socket.emit('operator:join', { operatorId: user.id });
-      } else if (role === 'customer') {
-        // We need customerId; in a real app would be known. For now, we can emit after page sets it via function.
-        // We'll handle separately via a method.
+    s.on("connect", () => {
+      console.log(`[Socket] ${role} connected:`, s.id);
+      if (role === "operator") {
+        s.emit("operator:join", { operatorId: user.id });
       }
+      setSocket(s);
     });
 
-    // Queue updates
-    socket.on('queue:update', (queueState: QueueState) => {
+    s.on("queue:update", (queueState: QueueState) => {
       setQueue(queueState);
     });
 
-    // Operator status updates
-    socket.on('operator:status_update', (status: OperatorStatus) => {
-      // Could update a global operator store if needed
-    });
+    if (role === "operator") {
+      s.on("call:established", ({ callId }: { callId: string }) => {
+        const prev = useCallStore.getState().currentCall;
+        if (prev && prev.id === callId) {
+          setCurrentCall({ ...prev, status: "active" });
+        }
+      });
 
-    // Incoming call
-    socket.on('call:incoming', (data: { callId: string; customerId: string; name: string; phone: string; reason: string; operatorId: string }) => {
-      // For operator: set current call
-      if (role === 'operator') {
-        const call = {
-          id: data.callId,
-          customerId: data.customerId,
-          operatorId: data.operatorId,
-          status: 'ringing' as const,
-          startTime: new Date(),
-          transcript: [],
-        };
-        setCurrentCall(call);
-      }
-    });
-
-    // Call established
-    socket.on('call:established', ({ callId }: { callId: string }) => {
-      if (role === 'operator') {
-        setCurrentCall((prev) =>
-          prev ? { ...prev, status: 'active' } : null,
-        );
-      }
-    });
-
-    // Call ended
-    socket.on('call:ended', ({ callId }: { callId: string }) => {
-      if (role === 'operator') {
+      s.on("call:ended", () => {
         setCurrentCall(null);
-      }
-    });
+      });
+    }
 
-    // Transcript updates
-    socket.on('transcript:update', ({ callId, segments }: { callId: string; segments: TranscriptSegment[] }) => {
+    s.on("transcript:update", ({ callId, segments }: { callId: string; segments: TranscriptSegment[] }) => {
       updateTranscript(segments);
     });
 
-    // AI analysis
-    socket.on('ai:analysis', ({ callId, analysis }: { callId: string; analysis: AIAnalysis }) => {
+    s.on("ai:analysis", ({ callId, analysis }: { callId: string; analysis: AIAnalysis }) => {
       setAIAnalysis(analysis);
     });
 
-    // Admin dashboard data
-    socket.on('admin:dashboard_data', (data: AdminDashboardData) => {
-      // Update admin store if needed
-    });
-
-    // Customer profile
-    socket.on('customer:profile', (profile: CustomerProfile) => {
-      // Could update customer store
-    });
-
-    socket.on('disconnect', () => {
-      console.log('Socket disconnected');
+    s.on("disconnect", (reason) => {
+      console.log(`[Socket] ${role} disconnected:`, reason);
+      setSocket(null);
     });
 
     return () => {
-      socket.disconnect();
+      s.off("connect");
+      s.off("queue:update");
+      s.off("call:established");
+      s.off("call:ended");
+      s.off("transcript:update");
+      s.off("ai:analysis");
+      s.disconnect();
     };
-  }, [token, user, role]);
+  }, [token, user, role, setQueue, setCurrentCall, updateTranscript, setAIAnalysis]);
 
-  // Helper: send transcript segment
-  const sendTranscript = (speaker: 'operator' | 'customer', text: string, callId: string) => {
-    socketRef.current?.emit('transcript:segment', { callId, speaker, text });
-  };
+  const sendTranscript = useCallback((speaker: "operator" | "customer", text: string, callId: string) => {
+    socket?.emit("transcript:segment", { callId, speaker, text });
+  }, [socket]);
 
-  // Helper: send WebRTC offer
-  const sendOffer = (callId: string, sdp: RTCSessionDescriptionInit) => {
-    socketRef.current?.emit('call:offer', { callId, sdp });
-  };
+  const sendOffer = useCallback((callId: string, sdp: RTCSessionDescriptionInit) => {
+    console.log(`[Socket] Sending offer for call ${callId}`);
+    socket?.emit("call:offer", { callId, sdp });
+  }, [socket]);
 
-  // Helper: send answer
-  const sendAnswer = (callId: string, sdp: RTCSessionDescriptionInit) => {
-    socketRef.current?.emit('call:answer', { callId, sdp });
-  };
+  const sendAnswer = useCallback((callId: string, sdp: RTCSessionDescriptionInit) => {
+    console.log(`[Socket] Sending answer for call ${callId}`);
+    socket?.emit("call:answer", { callId, sdp });
+  }, [socket]);
 
-  // Helper: send ICE candidate
-  const sendIceCandidate = (callId: string, candidate: RTCIceCandidateInit) => {
-    socketRef.current?.emit('call:ice-candidate', { callId, candidate });
-  };
+  const sendIceCandidate = useCallback((callId: string, candidate: RTCIceCandidateInit) => {
+    socket?.emit("call:ice-candidate", { callId, candidate });
+  }, [socket]);
 
-  // Helper: end call
-  const endCall = (callId: string) => {
-    socketRef.current?.emit('call:end', { callId });
-  };
+  const endCall = useCallback((callId: string) => {
+    socket?.emit("call:end", { callId });
+  }, [socket]);
 
-  // Helper: change operator status
-  const changeStatus = (status: 'available' | 'on_call' | 'busy' | 'offline') => {
-    socketRef.current?.emit('operator:status_change', { status });
-  };
+  const changeStatus = useCallback((status: "available" | "on_call" | "busy" | "offline") => {
+    socket?.emit("operator:status_change", { status });
+  }, [socket]);
+
+  const joinAsCustomer = useCallback((customerId: string, phone: string) => {
+    console.log(`[Socket] Customer ${customerId} joining`);
+    socket?.emit("customer:join", { customerId, phone });
+  }, [socket]);
 
   return {
-    socket: socketRef.current,
+    socket,
     sendTranscript,
     sendOffer,
     sendAnswer,
     sendIceCandidate,
     endCall,
     changeStatus,
+    joinAsCustomer,
   };
 };

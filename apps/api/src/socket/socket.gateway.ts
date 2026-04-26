@@ -4,11 +4,11 @@ import {
   SubscribeMessage,
   OnGatewayConnection,
   OnGatewayDisconnect,
-} from '@nestjs/websockets';
-import { Server, Socket } from 'socket.io';
-import { UseGuards } from '@nestjs/common';
-import { JwtService } from '@nestjs/jwt';
-import { ConfigService } from '@nestjs/config';
+} from "@nestjs/websockets";
+import { Server, Socket } from "socket.io";
+import { UseGuards, Inject, forwardRef } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
+import { ConfigService } from "@nestjs/config";
 import {
   SocketEvents,
   TranscriptSegment,
@@ -16,18 +16,19 @@ import {
   AIAnalysis,
   OperatorStatus,
   AdminDashboardData,
-} from '@sadoo/types';
-import { AuthService } from '../auth/auth.service';
-import { QueueService } from '../queue/queue.service';
-import { CallsService } from '../calls/calls.service';
-import { AiService } from '../ai/ai.service';
-import { CustomerService } from '../customers/customer.service';
-import { DashboardService } from '../dashboard/dashboard.service';
-import { FormulasService } from '../formulas/formulas.service';
+} from "@sadoo/types";
+import { AuthService } from "../auth/auth.service";
+import { QueueService } from "../queue/queue.service";
+import { CallsService } from "../calls/calls.service";
+import { AiService } from "../ai/ai.service";
+import { CustomerService } from "../customers/customer.service";
+import { DashboardService } from "../dashboard/dashboard.service";
+import { FormulasService } from "../formulas/formulas.service";
+import { CrmService } from "../seed/crm.service";
 
 @WebSocketGateway({
   cors: {
-    origin: '*',
+    origin: "*",
     credentials: true,
   },
 })
@@ -37,23 +38,27 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private operatorConnections: Map<string, Socket> = new Map();
   private customerConnections: Map<string, Socket> = new Map();
-  private callConnections: Map<string, { operator: Socket; customer?: Socket }> =
-    new Map();
+  private callConnections: Map<
+    string,
+    { operator: Socket; customer?: Socket }
+  > = new Map();
 
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly authService: AuthService,
+    @Inject(forwardRef(() => QueueService))
     private readonly queueService: QueueService,
     private readonly callsService: CallsService,
     private readonly aiService: AiService,
-    private readonly customerService: CustomersService,
+    private readonly customerService: CustomerService,
     private readonly dashboardService: DashboardService,
     private readonly formulasService: FormulasService,
+    private readonly crmService: CrmService,
   ) {}
 
   async handleConnection(client: Socket) {
-    console.log('Client connected:', client.id);
+    console.log("Client connected:", client.id);
   }
 
   handleDisconnect(client: Socket) {
@@ -62,7 +67,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
       if (socket.id === client.id) {
         this.operatorConnections.delete(operatorId);
         this.broadcastOperatorStatus(operatorId, {
-          status: 'offline',
+          status: "offline",
           isOnline: false,
         });
         break;
@@ -80,20 +85,20 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     for (const [callId, connections] of this.callConnections.entries()) {
       if (connections.operator?.id === client.id) {
         console.log(`Operator disconnected from call ${callId}`);
-        this.handleCallEnd(callId);
+        this.terminateCall(callId);
         this.callConnections.delete(callId);
         break;
       }
       if (connections.customer?.id === client.id) {
         console.log(`Customer disconnected from call ${callId}`);
-        this.handleCallEnd(callId);
+        this.terminateCall(callId);
         this.callConnections.delete(callId);
         break;
       }
     }
   }
 
-  @SubscribeMessage('operator:join')
+  @SubscribeMessage("operator:join")
   handleOperatorJoin(client: Socket, data: { operatorId: string }) {
     this.operatorConnections.set(data.operatorId, client);
     const user = this.authService.getUserById(data.operatorId);
@@ -107,20 +112,22 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     console.log(`Operator ${data.operatorId} joined`);
   }
 
-  @SubscribeMessage('customer:join')
-  handleCustomerJoin(client: Socket, data: { customerId: string; phone: string }) {
+  @SubscribeMessage("customer:join")
+  handleCustomerJoin(
+    client: Socket,
+    data: { customerId: string; phone: string },
+  ) {
     this.customerConnections.set(data.customerId, client);
     console.log(`Customer ${data.customerId} joined`);
 
     // Send welcome message if customer was waiting with AI chat
     const customer = this.queueService.getCustomer(data.customerId);
     if (customer?.profile) {
-      client.emit('customer:profile', customer.profile);
+      client.emit("customer:profile", customer.profile);
     }
   }
 
-
-  @SubscribeMessage('call:offer')
+  @SubscribeMessage("call:offer")
   handleCallOffer(client: Socket, data: { callId: string; sdp: any }) {
     const call = this.callsService.getCall(data.callId);
     if (!call) return;
@@ -128,7 +135,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Find customer socket and forward offer
     const customerSocket = this.customerConnections.get(call.customerId);
     if (customerSocket) {
-      customerSocket.emit('call:offer', data);
+      customerSocket.emit("call:offer", data);
       this.callConnections.set(data.callId, {
         operator: client,
         customer: customerSocket,
@@ -136,23 +143,40 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  @SubscribeMessage('call:answer')
+  @SubscribeMessage("call:answer")
   handleCallAnswer(client: Socket, data: { callId: string; sdp: any }) {
     const call = this.callsService.getCall(data.callId);
     if (!call) return;
 
-    // Forward answer to operator
+    // Find operator socket and forward answer
     const operatorSocket = this.operatorConnections.get(call.operatorId);
     if (operatorSocket) {
-      operatorSocket.emit('call:answer', data);
+      operatorSocket.emit("call:answer", data);
+    }
+
+    // Ensure callConnections tracks both sockets (customer may be the answerer)
+    const existing = this.callConnections.get(data.callId);
+    const resolvedOperatorSocket = operatorSocket ?? existing?.operator;
+    if (resolvedOperatorSocket) {
+      this.callConnections.set(data.callId, {
+        operator: resolvedOperatorSocket,
+        customer: client,
+      });
     }
 
     // Mark call as active
     this.callsService.answerCall(data.callId);
+
+    // Notify both parties call is established
+    const customerSocket = this.customerConnections.get(call.customerId);
+    const establishedEvent = { callId: data.callId };
+    operatorSocket?.emit("call:established", establishedEvent);
+    customerSocket?.emit("call:established", establishedEvent);
+
     this.broadcastCallStatus(data.callId);
   }
 
-  @SubscribeMessage('call:ice-candidate')
+  @SubscribeMessage("call:ice-candidate")
   handleIceCandidate(client: Socket, data: { callId: string; candidate: any }) {
     const call = this.callsService.getCall(data.callId);
     if (!call) return;
@@ -165,37 +189,29 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
           ? connections.customer
           : connections.operator;
       if (target) {
-        target.emit('call:ice-candidate', data);
+        target.emit("call:ice-candidate", data);
       }
     }
   }
 
-  @SubscribeMessage('transcript:segment')
+  @SubscribeMessage("transcript:segment")
   handleTranscriptSegment(
     client: Socket,
-    data: { callId: string; speaker: 'operator' | 'customer'; text: string },
+    data: { callId: string; speaker: "operator" | "customer"; text: string },
   ) {
     // Save segment
-    const segment = this.callsService.addTranscriptSegment(
-      data.callId,
-      data,
-    );
+    const segment = this.callsService.addTranscriptSegment(data.callId, {
+      ...data,
+      isFinal: true,
+    });
 
     // Broadcast to all relevant parties (operator + any monitoring admins)
     const call = this.callsService.getCall(data.callId);
     if (call) {
+      // Only broadcast to operator (customer should not see the transcript as per Cluely-style UX)
       const operatorSocket = this.operatorConnections.get(call.operatorId);
       if (operatorSocket) {
-        operatorSocket.emit('transcript:update', {
-          callId: data.callId,
-          segments: this.callsService.getTranscript(data.callId),
-        });
-      }
-
-      // Also send to customer so they see transcript
-      const customerSocket = this.customerConnections.get(call.customerId);
-      if (customerSocket) {
-        customerSocket.emit('transcript:update', {
+        operatorSocket.emit("transcript:update", {
           callId: data.callId,
           segments: this.callsService.getTranscript(data.callId),
         });
@@ -206,48 +222,52 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.triggerAIAnalysis(data.callId);
   }
 
-  @SubscribeMessage('call:end')
-  handleCallEnd(client: Socket, data: { callId: string }) {
-    const call = this.callsService.getCall(data.callId);
+  @SubscribeMessage("call:end")
+  handleCallEndMessage(client: Socket, data: { callId: string }) {
+    this.terminateCall(data.callId);
+  }
+
+  private terminateCall(callId: string) {
+    const call = this.callsService.getCall(callId);
     if (!call) return;
 
-    const { call: completedCall } = this.callsService.endCall(data.callId, {
+    this.callsService.endCall(callId, {
       success: false,
     });
 
     // Update operator status
     const user = this.authService.getUserById(call.operatorId);
     if (user) {
-      user.status = 'available';
+      user.status = "available";
       user.currentCallId = undefined;
       this.broadcastOperatorStatus(call.operatorId, {
-        status: 'available',
+        status: "available",
       });
     }
 
     // Notify both parties
     const operatorSocket = this.operatorConnections.get(call.operatorId);
     if (operatorSocket) {
-      operatorSocket.emit('call:ended', { callId: data.callId });
+      operatorSocket.emit("call:ended", { callId });
     }
 
     const customerSocket = this.customerConnections.get(call.customerId);
     if (customerSocket) {
-      customerSocket.emit('call:ended', { callId: data.callId });
+      customerSocket.emit("call:ended", { callId });
     }
 
-    this.callConnections.delete(data.callId);
-    this.callsService.getCall(data.callId); // Cleanup
+    this.callConnections.delete(callId);
+    this.callsService.getCall(callId); // Cleanup
 
     // Broadcast updates
     this.broadcastQueueUpdate();
     this.broadcastOperatorStats(call.operatorId);
   }
 
-  @SubscribeMessage('operator:status_change')
+  @SubscribeMessage("operator:status_change")
   handleOperatorStatusChange(
     client: Socket,
-    data: { status: 'available' | 'on_call' | 'busy' | 'offline' },
+    data: { status: "available" | "on_call" | "busy" | "offline" },
   ) {
     // Find operator by socket
     let operatorId: string | undefined;
@@ -270,7 +290,6 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   private async triggerAIAnalysis(callId: string) {
-    // Get full transcript
     const transcript = this.callsService.getTranscript(callId);
     if (transcript.length === 0) return;
 
@@ -282,7 +301,31 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     const transcriptText = transcript
       .map((s) => `${s.speaker}: ${s.text}`)
-      .join('\n');
+      .join("\n");
+
+    // Get CRM context if available
+    let crmContext;
+    if (customer?.phone) {
+      const crmClient = this.crmService.getClientByPhone(customer.phone);
+      if (crmClient) {
+        const previousCalls = this.crmService
+          .getClientCalls(crmClient.clientCode)
+          .slice(0, 3)
+          .map((c) => `[${c.date}] ${c.intent} → ${c.saleResult}`)
+          .join("; ");
+        crmContext = {
+          segment: crmClient.segment,
+          riskLevel: crmClient.riskLevel,
+          monthlyIncome: crmClient.monthlyIncome,
+          products: {
+            loan: crmClient.hasLoan,
+            deposit: crmClient.hasDeposit,
+            card: crmClient.hasCard,
+          },
+          previousCalls,
+        };
+      }
+    }
 
     try {
       const analysis = await this.aiService.analyzeTranscript(
@@ -290,28 +333,31 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
         customer?.profile || {
           needs: [],
           productInterest: [],
-          mood: 'neutral',
-          summary: '',
+          mood: "neutral",
+          summary: "",
           keywords: [],
           estimatedValue: 0,
-          language: 'uz',
+          language: "uz",
         },
         formulas,
+        crmContext,
       );
 
       this.callsService.setAIAnalysis(callId, analysis);
 
-      // Send to operator
       const operatorSocket = this.operatorConnections.get(call.operatorId);
       if (operatorSocket) {
-        operatorSocket.emit('ai:analysis', { callId, analysis });
+        operatorSocket.emit("ai:analysis", { callId, analysis });
       }
     } catch (error) {
-      console.error('AI analysis error:', error);
+      console.error("AI analysis error:", error);
     }
   }
 
-  private broadcastOperatorStatus(operatorId: string, status: Partial<OperatorStatus>) {
+  public broadcastOperatorStatus(
+    operatorId: string,
+    status: Partial<OperatorStatus>,
+  ) {
     const user = this.authService.getUserById(operatorId);
     if (!user) return;
 
@@ -322,12 +368,13 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
       currentCallId: user.currentCallId,
       callsToday: 0,
       lastActivity: new Date(),
+      isOnline: status.isOnline ?? user.isOnline,
     };
 
     // Broadcast to all connected operators (for admin view)
     for (const [id, socket] of this.operatorConnections.entries()) {
       if (id !== operatorId) {
-        socket.emit('operator:status_update', statusUpdate);
+        socket.emit("operator:status_update", statusUpdate);
       }
     }
   }
@@ -335,7 +382,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   public broadcastQueueUpdate() {
     const queueState = this.queueService.getQueueState();
     for (const [id, socket] of this.operatorConnections.entries()) {
-      socket.emit('queue:update', queueState);
+      socket.emit("queue:update", queueState);
     }
   }
 
@@ -344,8 +391,19 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (stats) {
       const operatorSocket = this.operatorConnections.get(operatorId);
       if (operatorSocket) {
-        operatorSocket.emit('operator:stats_update', stats);
+        operatorSocket.emit("operator:stats_update", stats);
       }
+    }
+  }
+
+  public notifyCustomerCallStarted(
+    customerId: string,
+    callId: string,
+    operatorId: string,
+  ) {
+    const customerSocket = this.customerConnections.get(customerId);
+    if (customerSocket) {
+      customerSocket.emit("call:incoming", { callId, customerId, operatorId });
     }
   }
 
@@ -356,7 +414,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
     // Broadcast to relevant parties
     const callData = { callId, ...call };
     for (const [id, socket] of this.operatorConnections.entries()) {
-      socket.emit('call:status_update', callData);
+      socket.emit("call:status_update", callData);
     }
   }
 }

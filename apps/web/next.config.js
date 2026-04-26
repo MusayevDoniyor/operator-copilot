@@ -2,12 +2,9 @@
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  transpilePackages: ['@sadoo/types'],
-  experimental: {
-    serverComponentsExternalPackages: ['@sadoo/types'],
-  },
+  transpilePackages: ["@sadoo/types"],
   env: {
-    CUSTOM_KEY: 'value',
+    CUSTOM_KEY: "value",
   },
 };
 

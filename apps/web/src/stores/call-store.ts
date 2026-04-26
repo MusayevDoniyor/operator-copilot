@@ -1,11 +1,13 @@
 import { create } from 'zustand';
-import { Call, TranscriptSegment, AIAnalysis } from '@sadoo/types';
+import { Call, TranscriptSegment, AIAnalysis, CrmClientProfile } from '@sadoo/types';
 
 interface CallStore {
   currentCall: Call | null;
   transcript: TranscriptSegment[];
   aiAnalysis: AIAnalysis | null;
-  setCurrentCall: (call: Call | null) => void;
+  crmProfile: CrmClientProfile | null;
+  previousCalls: Array<{ date: string; intent: string; result: string }>;
+  setCurrentCall: (call: Call | null, enriched?: { crmProfile?: CrmClientProfile; previousCalls?: Array<{ date: string; intent: string; result: string }> }) => void;
   addTranscript: (segment: TranscriptSegment) => void;
   updateTranscript: (segments: TranscriptSegment[]) => void;
   setAIAnalysis: (analysis: AIAnalysis | null) => void;
@@ -16,11 +18,15 @@ export const useCallStore = create<CallStore>((set) => ({
   currentCall: null,
   transcript: [],
   aiAnalysis: null,
-  setCurrentCall: (call) => {
+  crmProfile: null,
+  previousCalls: [],
+  setCurrentCall: (call, enriched) => {
     set({
       currentCall: call,
       transcript: call ? call.transcript : [],
       aiAnalysis: call?.aiAnalysis || null,
+      crmProfile: enriched?.crmProfile || null,
+      previousCalls: enriched?.previousCalls || [],
     });
   },
   addTranscript: (segment) =>
@@ -34,5 +40,7 @@ export const useCallStore = create<CallStore>((set) => ({
       currentCall: null,
       transcript: [],
       aiAnalysis: null,
+      crmProfile: null,
+      previousCalls: [],
     }),
 }));

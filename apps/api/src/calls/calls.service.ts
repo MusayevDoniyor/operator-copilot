@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { Call, TranscriptSegment, CallOutcome } from '@sadoo/types';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable } from "@nestjs/common";
+import { Call, TranscriptSegment, CallOutcome } from "@sadoo/types";
+import { v4 as uuidv4 } from "uuid";
 
 @Injectable()
 export class CallsService {
@@ -11,7 +11,7 @@ export class CallsService {
       id: uuidv4(),
       customerId,
       operatorId,
-      status: 'ringing',
+      status: "ringing",
       startTime: new Date(),
       transcript: [],
     };
@@ -30,7 +30,7 @@ export class CallsService {
 
   getAllActiveCalls(): Call[] {
     return Array.from(this.calls.values()).filter(
-      (c) => c.status === 'active' || c.status === 'ringing',
+      (c) => c.status === "active" || c.status === "ringing",
     );
   }
 
@@ -48,8 +48,8 @@ export class CallsService {
 
   answerCall(callId: string): Call {
     const call = this.calls.get(callId);
-    if (!call) throw new Error('Call not found');
-    call.status = 'active';
+    if (!call) throw new Error("Call not found");
+    call.status = "active";
     this.calls.set(callId, call);
     return call;
   }
@@ -59,9 +59,9 @@ export class CallsService {
     outcome: Partial<CallOutcome>,
   ): { call: Call; duration: number } {
     const call = this.calls.get(callId);
-    if (!call) throw new Error('Call not found');
+    if (!call) throw new Error("Call not found");
 
-    call.status = 'completed';
+    call.status = "completed";
     call.endTime = new Date();
     call.duration = call.endTime.getTime() - call.startTime.getTime();
     if (outcome) {
@@ -74,10 +74,10 @@ export class CallsService {
 
   addTranscriptSegment(
     callId: string,
-    segment: Omit<TranscriptSegment, 'id' | 'timestamp'>,
+    segment: Omit<TranscriptSegment, "id" | "timestamp">,
   ): TranscriptSegment {
     const call = this.calls.get(callId);
-    if (!call) throw new Error('Call not found');
+    if (!call) throw new Error("Call not found");
 
     const newSegment: TranscriptSegment = {
       ...segment,
@@ -110,7 +110,7 @@ export class CallsService {
     return call ? call.transcript : [];
   }
 
-  setAIAnalysis(callId: string, analysis: Call['aiAnalysis']) {
+  setAIAnalysis(callId: string, analysis: Call["aiAnalysis"]) {
     const call = this.calls.get(callId);
     if (call) {
       call.aiAnalysis = analysis;

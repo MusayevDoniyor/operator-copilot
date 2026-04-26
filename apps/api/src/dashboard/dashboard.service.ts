@@ -1,17 +1,25 @@
-import { Injectable } from '@nestjs/common';
-import { DashboardStats, OperatorStats, FormulaStats, AdminDashboardData, OperatorStatus, User } from '@sadoo/types';
-import { CallsService } from '../calls/calls.service';
-import { QueueService } from '../queue/queue.service';
-import { CustomersService } from '../customers/customer.service';
-import { FormulasService } from '../formulas/formulas.service';
-import { AuthService } from '../auth/auth.service';
+import { Injectable, Inject, forwardRef } from "@nestjs/common";
+import {
+  DashboardStats,
+  OperatorStats,
+  FormulaStats,
+  AdminDashboardData,
+  OperatorStatus,
+  User,
+} from "@sadoo/types";
+import { CallsService } from "../calls/calls.service";
+import { QueueService } from "../queue/queue.service";
+import { CustomerService } from "../customers/customer.service";
+import { FormulasService } from "../formulas/formulas.service";
+import { AuthService } from "../auth/auth.service";
 
 @Injectable()
 export class DashboardService {
   constructor(
     private readonly callsService: CallsService,
+    @Inject(forwardRef(() => QueueService))
     private readonly queueService: QueueService,
-    private readonly customerService: CustomersService,
+    private readonly customerService: CustomerService,
     private readonly formulasService: FormulasService,
     private readonly authService: AuthService,
   ) {}
@@ -23,12 +31,12 @@ export class DashboardService {
     today.setHours(0, 0, 0, 0);
 
     const todayCalls = allCalls.filter(
-      (c) => new Date(c.startTime) >= today && c.status === 'completed',
+      (c) => new Date(c.startTime) >= today && c.status === "completed",
     );
-    const activeCalls = allCalls.filter((c) => c.status === 'active');
+    const activeCalls = allCalls.filter((c) => c.status === "active");
     const queue = this.queueService.getQueueState();
 
-    const completedCalls = allCalls.filter((c) => c.status === 'completed');
+    const completedCalls = allCalls.filter((c) => c.status === "completed");
     const conversionRate =
       completedCalls.length > 0
         ? completedCalls.filter((c) => c.outcome?.success).length /
@@ -57,7 +65,7 @@ export class DashboardService {
 
     return users.map((user) => {
       const operatorCalls = allCalls.filter(
-        (c) => c.operatorId === user.id && c.status === 'completed',
+        (c) => c.operatorId === user.id && c.status === "completed",
       );
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -104,7 +112,7 @@ export class DashboardService {
 
     const operatorStatuses: OperatorStatus[] = operators.map((user) => {
       const activeCall = allCalls.find(
-        (c) => c.operatorId === user.id && c.status === 'active',
+        (c) => c.operatorId === user.id && c.status === "active",
       );
 
       return {
@@ -114,13 +122,14 @@ export class DashboardService {
         currentCallId: activeCall?.id,
         callsToday: 0,
         lastActivity: new Date(),
+        isOnline: user.isOnline,
       };
     });
 
     return {
       operators: operatorStatuses,
       queueDepth: this.queueService.getQueueState().totalWaiting,
-      activeCalls: allCalls.filter((c) => c.status === 'active').length,
+      activeCalls: allCalls.filter((c) => c.status === "active").length,
       platformStats: this.getDashboardStats(),
       formulaLeaderboard: this.getFormulaStats().sort(
         (a, b) => b.successRate - a.successRate,

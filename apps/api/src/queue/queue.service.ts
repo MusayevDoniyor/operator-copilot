@@ -1,6 +1,6 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
-import { Customer, QueueState } from '@sadoo/types';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable, InternalServerErrorException } from "@nestjs/common";
+import { Customer, QueueState } from "@sadoo/types";
+import { v4 as uuidv4 } from "uuid";
 
 @Injectable()
 export class QueueService {
@@ -9,7 +9,7 @@ export class QueueService {
 
   getAll(): Customer[] {
     return Array.from(this.customers.values()).filter(
-      (c) => c.status === 'waiting',
+      (c) => c.status === "waiting",
     );
   }
 
@@ -34,16 +34,16 @@ export class QueueService {
       reason: data.reason,
       queuePosition: this.positionCounter++,
       joinedAt: new Date(),
-      status: 'waiting',
+      status: "waiting",
       sessionId: this.generateSessionId(),
       profile: {
         needs: [],
         productInterest: [],
-        mood: 'neutral',
-        summary: '',
+        mood: "neutral",
+        summary: "",
         keywords: [],
         estimatedValue: 0,
-        language: 'uz',
+        language: "uz",
       },
     };
 
@@ -58,7 +58,7 @@ export class QueueService {
     // Sort by queue position, return first
     waiting.sort((a, b) => a.queuePosition - b.queuePosition);
     const next = waiting[0];
-    next.status = 'in_call';
+    next.status = "in_call";
     this.customers.set(next.id, next);
     return next;
   }
@@ -69,12 +69,12 @@ export class QueueService {
 
   updateCustomerProfile(
     id: string,
-    profile: Partial<Customer['profile']>,
+    profile: Partial<Customer["profile"]>,
   ): Customer | undefined {
     const customer = this.customers.get(id);
     if (!customer) return undefined;
 
-    customer.profile = { ...customer.profile, ...profile };
+    customer.profile = { ...(customer.profile as any), ...(profile as any) };
     this.customers.set(id, customer);
     return customer;
   }
@@ -82,24 +82,24 @@ export class QueueService {
   assignToOperator(customerId: string, operatorId: string): void {
     const customer = this.customers.get(customerId);
     if (!customer) {
-      throw new InternalServerErrorException('Customer not found');
+      throw new InternalServerErrorException("Customer not found");
     }
     customer.assignedOperatorId = operatorId;
-    customer.status = 'in_call';
+    customer.status = "in_call";
     this.customers.set(customerId, customer);
   }
 
   completeCall(customerId: string): void {
     const customer = this.customers.get(customerId);
     if (!customer) return;
-    customer.status = 'completed';
+    customer.status = "completed";
     this.customers.set(customerId, customer);
   }
 
   cancelCall(customerId: string): void {
     const customer = this.customers.get(customerId);
     if (!customer) return;
-    customer.status = 'cancelled';
+    customer.status = "cancelled";
     this.customers.set(customerId, customer);
   }
 

@@ -1,17 +1,19 @@
-import * as Joi from 'joi';
+import * as Joi from "joi";
 
 export const envSchema = Joi.object({
   NODE_ENV: Joi.string()
-    .valid('development', 'production', 'test', 'provision')
-    .default('development'),
+    .valid("development", "production", "test", "provision")
+    .default("development"),
   PORT: Joi.number().default(3001),
-  FRONTEND_URL: Joi.string().default('http://localhost:3000'),
-  JWT_SECRET: Joi.string().required().description('JWT secret for signing tokens'),
-  JWT_EXPIRES_IN: Joi.string().default('24h'),
-  GEMINI_API_KEY: Joi.string().required().description('Google Gemini API key'),
+  FRONTEND_URL: Joi.string().default("http://localhost:3000"),
+  JWT_SECRET: Joi.string()
+    .required()
+    .description("JWT secret for signing tokens"),
+  JWT_EXPIRES_IN: Joi.string().default("24h"),
+  GEMINI_API_KEY: Joi.string().required().description("Google Gemini API key"),
   // Hardcoded users for demo - in production use DB
-  ADMIN_USERNAME: Joi.string().default('admin'),
-  ADMIN_PASSWORD: Joi.string().default('admin123'),
+  ADMIN_USERNAME: Joi.string().default("admin"),
+  ADMIN_PASSWORD: Joi.string().default("admin123"),
 });
 
 export type EnvConfig = {

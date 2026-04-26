@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common';
-import { Customer, CustomerProfile, CustomerMemory } from '@sadoo/types';
-import { v4 as uuidv4 } from 'uuid';
+import { Injectable } from "@nestjs/common";
+import { Customer, CustomerProfile, CustomerMemory } from "@sadoo/types";
+import { v4 as uuidv4 } from "uuid";
 
 @Injectable()
 export class CustomerService {
@@ -26,7 +26,7 @@ export class CustomerService {
       totalPurchases: 0,
       loyaltyScore: 0,
       preferences: [],
-      notes: '',
+      notes: "",
     };
     this.memories.set(phone, memory);
     return memory;
@@ -42,15 +42,18 @@ export class CustomerService {
     return memory;
   }
 
-  addInteraction(phone: string, record: Omit<import('@sadoo/types').InteractionRecord, 'date'>) {
+  addInteraction(
+    phone: string,
+    record: Omit<import("@sadoo/types").InteractionRecord, "date">,
+  ) {
     const memory = this.getOrCreateMemory(phone);
-    const interaction: import('@sadoo/types').InteractionRecord = {
+    const interaction: import("@sadoo/types").InteractionRecord = {
       ...record,
       date: new Date(),
     };
     memory.interactions.unshift(interaction);
     memory.totalCalls++;
-    if (record.outcome === 'sale') {
+    if (record.outcome === "sale") {
       memory.totalPurchases++;
     }
     this.memories.set(phone, memory);

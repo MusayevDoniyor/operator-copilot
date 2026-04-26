@@ -1,8 +1,10 @@
 // User types
-export enum UserRole {
-  ADMIN = 'ADMIN',
-  OPERATOR = 'OPERATOR'
-}
+export const UserRole = {
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR'
+} as const;
+
+export type UserRole = (typeof UserRole)[keyof typeof UserRole];
 
 export interface User {
   id: string;
@@ -36,6 +38,13 @@ export interface Customer {
   status: 'waiting' | 'in_call' | 'completed' | 'cancelled';
   profile?: CustomerProfile;
   sessionId: string;
+  // Enriched with CRM data
+  crmProfile?: CrmClientProfile;
+  previousCalls?: Array<{
+    date: string;
+    intent: string;
+    result: string;
+  }>;
 }
 
 export interface CustomerProfile {
@@ -46,6 +55,45 @@ export interface CustomerProfile {
   keywords: string[];
   estimatedValue: number;
   language: 'uz' | 'ru' | 'en';
+}
+
+// CRM data from seed
+export interface CrmClientProfile {
+  clientCode: string;
+  name: string;
+  type: 'Physical' | 'Legal';
+  segment: 'Mass' | 'Premium' | 'VIP';
+  hasLoan: boolean;
+  hasDeposit: boolean;
+  hasCard: boolean;
+  monthlyIncome: number;
+  riskLevel: 'Low' | 'Medium' | 'High';
+  lastTxnDate: string;
+  phone?: string;
+}
+
+// Alias for convenience
+export type ClientProfile = CrmClientProfile;
+
+export interface CallHistory {
+  callId: string;
+  date: string;
+  durationSec: number;
+  language: 'UZ' | 'RU';
+  intent: string;
+  clientCode: string;
+  clientName: string;
+  operatorId: string;
+  branch: string;
+  transcript: string;
+  kycPassport: boolean;
+  kycPinfl: boolean;
+  amlPurpose: boolean;
+  amlSource: boolean;
+  pepCheck: boolean;
+  crossSell: boolean;
+  checklistScore: number;
+  saleResult: 'Completed' | 'Pending' | 'Declined';
 }
 
 // Queue types
@@ -85,6 +133,14 @@ export interface CallOutcome {
 }
 
 // AI Copilot types
+export interface ComplianceItem {
+  id: string;
+  label: string;
+  required: boolean;
+  detected: boolean;
+  keywords: string[];
+}
+
 export interface AIAnalysis {
   nextAction: string;
   suggestedScript: string;
@@ -92,10 +148,37 @@ export interface AIAnalysis {
   objectionDetected?: boolean;
   objectionResponse?: string;
   recommendedProduct?: string;
+  crossSellOpportunity?: string;
   sentiment: 'positive' | 'neutral' | 'negative';
   salesStage: 'greeting' | 'discovery' | 'pitch' | 'objection' | 'closing' | 'complete';
   confidence: number;
+  compliance: {
+    interestRateDisclosed: boolean;
+    dataConsentObtained: boolean;
+    kycVerified: boolean;
+    purposeOfVisitConfirmed: boolean;
+  };
+  urgencyLevel: 'low' | 'medium' | 'high';
 }
+
+export interface PostCallSummary {
+  callId: string;
+  duration: number;
+  customerName: string;
+  operatorName: string;
+  outcome: 'sale_completed' | 'pending_callback' | 'declined' | 'transferred';
+  productSold?: string;
+  saleAmount?: number;
+  keyTopics: string[];
+  customerSentiment: 'positive' | 'neutral' | 'negative';
+  complianceScore: number;
+  scriptAdherence: number;
+  summary: string;
+  actionItems: string[];
+  crmNote: string;
+  qualityScore: number;
+}
+
 
 export interface Formula {
   id: string;
@@ -199,6 +282,7 @@ export interface OperatorStatus {
   currentCallId?: string;
   callsToday: number;
   lastActivity: Date;
+  isOnline: boolean;
 }
 
 // WebRTC
@@ -207,5 +291,27 @@ export interface PeerConnectionState {
   localOffer?: RTCSessionDescriptionInit;
   remoteAnswer?: RTCSessionDescriptionInit;
   iceCandidates: RTCIceCandidateInit[];
-  state: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
+   state: 'new' | 'connecting' | 'connected' | 'disconnected' | 'failed' | 'closed';
+ }
+
+// CRM & Analytics
+export interface Analytics {
+  totalClients: number;
+  totalCalls: number;
+  intentDistribution: Record<string, number>;
+  scoreDistribution: Record<string, number>;
+  saleResults: {
+    Completed: number;
+    Pending: number;
+    Declined: number;
+  };
+  languageDistribution: { UZ: number; RU: number };
+  segmentDistribution: { Mass: number; Premium: number; VIP: number };
+  topOperators: Array<{
+    operatorId: string;
+    avgScore: number;
+    calls: number;
+    conversionRate: number;
+  }>;
 }
+
